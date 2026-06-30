@@ -98,7 +98,7 @@ app.get("/track/click", (req, res) => {
 });
 
 // ── Stats API ─────────────────────────────────────────────────────
-// GET /stats/campaign/:cid → opens, clicks, unique openers
+// GET /stats/campaign/:cid → opens, clicks, unique openers (with per-contact open counts)
 app.get("/stats/campaign/:cid", (req, res) => {
   const { cid } = req.params;
   const opens      = db.prepare(`SELECT COUNT(*) as n FROM opens  WHERE campaign_id=?`).get(cid);
@@ -107,7 +107,29 @@ app.get("/stats/campaign/:cid", (req, res) => {
   const uniqueClick= db.prepare(`SELECT COUNT(DISTINCT contact_id) as n FROM clicks WHERE campaign_id=?`).get(cid);
   const recentOpens= db.prepare(`SELECT contact_id, email, opened_at FROM opens WHERE campaign_id=? ORDER BY opened_at DESC LIMIT 50`).all(cid);
   const recentClicks=db.prepare(`SELECT contact_id, email, url, clicked_at FROM clicks WHERE campaign_id=? ORDER BY clicked_at DESC LIMIT 50`).all(cid);
-  res.json({ campaign_id: cid, opens: opens.n, unique_opens: uniqueOpen.n, clicks: clicks.n, unique_clicks: uniqueClick.n, recent_opens: recentOpens, recent_clicks: recentClicks });
+
+  // Full unique-opener list, grouped server-side — not capped, accurate for any list size
+  const uniqueOpeners = db.prepare(`
+    SELECT contact_id, email,
+      COUNT(*) as open_count,
+      MIN(opened_at) as first_open,
+      MAX(opened_at) as last_open
+    FROM opens
+    WHERE campaign_id = ?
+    GROUP BY contact_id
+    ORDER BY last_open DESC
+  `).all(cid);
+
+  res.json({
+    campaign_id: cid,
+    opens: opens.n,
+    unique_opens: uniqueOpen.n,
+    clicks: clicks.n,
+    unique_clicks: uniqueClick.n,
+    recent_opens: recentOpens,
+    recent_clicks: recentClicks,
+    unique_openers: uniqueOpeners,
+  });
 });
 
 // GET /stats/all → summary across all campaigns
@@ -138,3 +160,4 @@ app.listen(PORT, () => {
   console.log(`MailFlow Tracking Server running on port ${PORT}`);
   console.log(`DB: ${DB_PATH}`);
 });
+
