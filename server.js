@@ -160,4 +160,3 @@ app.listen(PORT, () => {
   console.log(`MailFlow Tracking Server running on port ${PORT}`);
   console.log(`DB: ${DB_PATH}`);
 });
-
